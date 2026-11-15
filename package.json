@@ -1,0 +1,20 @@
+{
+  "name": "kontolodon-gatekeeper",
+  "version": "1.0.0",
+  "description": "Proof Gatekeeper agent for zkVerify Agent Games Season 01 (@kontolodon)",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node proof-test.js"
+  },
+  "engines": { "node": ">=22" },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "ethers": "^6.17.0",
+    "snarkjs": "^0.7.6"
+  }
+}

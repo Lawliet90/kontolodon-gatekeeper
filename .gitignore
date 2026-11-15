@@ -1,0 +1,4 @@
+.env
+seen-proofs.json
+decisions.log
+node_modules/
