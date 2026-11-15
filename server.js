@@ -20,10 +20,15 @@ const snarkjs = require("snarkjs");
 const { ethers } = require("ethers");
 
 const ROOT = __dirname;
-// Minimal .env loader (no dependency)
-for (const line of fs.readFileSync(path.join(ROOT, ".env"), "utf8").split("\n")) {
-  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+// Minimal .env loader (no dependency). Canonical secrets live in the parent
+// ~/workspace/zkverify-agent-games/.env; a local .env is a fallback.
+for (const f of [path.join(ROOT, "..", ".env"), path.join(ROOT, ".env")]) {
+  let text = "";
+  try { text = fs.readFileSync(f, "utf8"); } catch { continue; }
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+  }
 }
 
 const PORT = parseInt(process.env.PORT || "8787", 10);
@@ -257,7 +262,17 @@ const server = http.createServer((req, res) => {
         return sendJson(res, 200, { ok: true, service: "kontolodon-gatekeeper", protocolVersion: "v1" }, false);
       }
       if (url.pathname !== "/agent") return sendJson(res, 404, { error: "not found" }, false);
-      // Verify HMAC over the RAW body before parsing (skip only when no secret configured).
+      // Preflight probes (GET, or POST without a task envelope) are answered
+      // WITHOUT requiring HMAC — the dashboard may probe unsigned. No state
+      // changes here, so this is safe; task envelopes below stay HMAC-gated.
+      if (req.method === "GET") return sendJson(res, 200, { ok: true, protocolVersion: "v1" }, true);
+      if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" }, false);
+      let probe = null;
+      try { probe = JSON.parse(rawBody.toString("utf8")); } catch { probe = null; }
+      if (!probe || typeof probe !== "object" || !probe.task_id) {
+        return sendJson(res, 200, { ok: true, protocolVersion: "v1" }, true);
+      }
+      // Task envelope: verify HMAC over the RAW body before trusting the JSON.
       if (HMAC_SECRET) {
         const sig = req.headers["x-agent-games-signature"];
         if (!verifyHmac(HMAC_SECRET, rawBody, sig)) {
@@ -265,8 +280,6 @@ const server = http.createServer((req, res) => {
           return sendJson(res, 401, { error: "bad signature" }, false);
         }
       }
-      if (req.method === "GET") return sendJson(res, 200, { ok: true, protocolVersion: "v1" }, true);
-      if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" }, false);
       // Hard safety: never exceed the 60 s platform deadline from inside the handler.
       const timer = setTimeout(() => {
         try { sendJson(res, 200, { decision: "REJECT", reason_code: "VALID_CONDITION", proof_tx: "" }, true); } catch { /* already sent */ }
