@@ -56,11 +56,13 @@ function logDecision(rec) {
   fs.appendFileSync(DECISIONS_LOG, JSON.stringify({ ts: new Date().toISOString(), ...rec }) + "\n");
 }
 
-// ---- HMAC helpers (hex HMAC-SHA256 over raw body) ----
+// ---- HMAC helpers (HMAC-SHA256 over raw body) ----
+// The platform treats the 64-char hex secret as an opaque string key:
+// HMAC key = UTF-8 bytes of the secret string (NOT hex-decoded).
+// (Hex-decoding was tried first and the platform's preflight rejected the
+// signature — verified 2026-11-16.)
 function hmacHex(secretHexOrRaw, body) {
-  const key = /^[0-9a-fA-F]{64}$/.test(secretHexOrRaw)
-    ? Buffer.from(secretHexOrRaw, "hex")
-    : Buffer.from(secretHexOrRaw, "utf8");
+  const key = Buffer.from(secretHexOrRaw, "utf8");
   return crypto.createHmac("sha256", key).update(body).digest("hex");
 }
 function verifyHmac(secret, rawBody, sig) {
